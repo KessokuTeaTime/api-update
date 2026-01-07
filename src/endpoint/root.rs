@@ -9,12 +9,12 @@ use api_framework::{
 };
 
 use axum::{Json, http::StatusCode, response::IntoResponse};
-use config_file::FromConfigFile;
+use config_file::FromConfigFile as _;
 use serde::Deserialize;
 
 use crate::{
     config::{
-        Config,
+        Config as _,
         services::{ServiceConfig, ServicesConfig},
     },
     env::DOCKER_WORKSPACE_DIR,
@@ -52,8 +52,8 @@ pub async fn post(Json(payload): Json<PostPayload>) -> impl IntoResponse {
     let service = match services
         .services
         .iter()
-        .cloned()
         .find(|s| s.service_label == payload.service_label)
+        .cloned()
     {
         Some(s) => s,
         None => {
@@ -65,11 +65,22 @@ pub async fn post(Json(payload): Json<PostPayload>) -> impl IntoResponse {
         }
     };
 
-    tokio::spawn(QUEUED_ASYNC.run(payload.service_label.clone(), move |cx| {
-        Box::pin(post_transaction(cx, payload.clone(), service.clone()))
-    }));
-
-    StatusCode::OK.into_response()
+    match QUEUED_ASYNC
+        .run(payload.service_label.clone(), move |cx| {
+            Box::pin(post_transaction(cx, payload.clone(), service.clone()))
+        })
+        .await
+    {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(_) => {
+            tracing::error!("failed to queue update transaction");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to queue update transaction",
+            )
+                .into_response()
+        }
+    }
 }
 
 async fn post_transaction(
@@ -79,7 +90,7 @@ async fn post_transaction(
 ) -> StateResult<()> {
     async fn inner(cx: &QueuedAsyncFrameworkContext, service: &ServiceConfig) -> StateResult<()> {
         // cd to workspace
-        transactions::sys::cd(&*DOCKER_WORKSPACE_DIR)
+        transactions::sys::cd(&DOCKER_WORKSPACE_DIR)
             .await
             .map_err(|_| StateError::Retry)?;
 
@@ -101,6 +112,9 @@ async fn post_transaction(
         transactions::docker::compose_up(&service.container_name)
             .await
             .map_err(|_| StateError::Retry)?;
+
+        // logout from docker
+        transactions::docker::logout().await.ok();
 
         Ok(())
     }
