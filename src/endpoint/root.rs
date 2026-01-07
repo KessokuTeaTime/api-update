@@ -1,1 +1,118 @@
 //! Endpoint root.
+
+use api_framework::{
+    framework::{
+        StateError, StateResult,
+        queued_async::{QueuedAsyncFramework, QueuedAsyncFrameworkContext},
+    },
+    static_lazy_lock,
+};
+
+use axum::{Json, http::StatusCode, response::IntoResponse};
+use config_file::FromConfigFile;
+use serde::Deserialize;
+
+use crate::{
+    config::{
+        Config,
+        services::{ServiceConfig, ServicesConfig},
+    },
+    env::DOCKER_WORKSPACE_DIR,
+    transactions,
+};
+
+static_lazy_lock! {
+    QUEUED_ASYNC: QueuedAsyncFramework<String> = QueuedAsyncFramework::new();
+}
+
+/// The payload of the post.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PostPayload {
+    /// The label of the service to update.
+    pub service_label: String,
+}
+
+/// The client posted an update request.
+/// Responds with [`StatusCode::OK`] right after the deployment is triggered.
+///
+/// See: [`PostPayload`], [`post_transaction`]
+pub async fn post(Json(payload): Json<PostPayload>) -> impl IntoResponse {
+    let services = match ServicesConfig::from_config_file(ServicesConfig::file().path()) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("failed to read services config: {e:?}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to read services config: {e:?}"),
+            )
+                .into_response();
+        }
+    };
+
+    let service = match services
+        .services
+        .iter()
+        .cloned()
+        .find(|s| s.service_label == payload.service_label)
+    {
+        Some(s) => s,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("service with label '{}' not found", payload.service_label),
+            )
+                .into_response();
+        }
+    };
+
+    tokio::spawn(QUEUED_ASYNC.run(payload.service_label.clone(), move |cx| {
+        Box::pin(post_transaction(cx, payload.clone(), service.clone()))
+    }));
+
+    StatusCode::OK.into_response()
+}
+
+async fn post_transaction(
+    cx: QueuedAsyncFrameworkContext,
+    _payload: PostPayload,
+    service: ServiceConfig,
+) -> StateResult<()> {
+    async fn inner(cx: &QueuedAsyncFrameworkContext, service: &ServiceConfig) -> StateResult<()> {
+        // cd to workspace
+        transactions::sys::cd(&*DOCKER_WORKSPACE_DIR)
+            .await
+            .map_err(|_| StateError::Retry)?;
+
+        // login to docker
+        transactions::docker::login()
+            .await
+            .map_err(|_| StateError::Retry)?;
+
+        cx.check(())?;
+
+        // pull image
+        transactions::docker::pull_image(&service.image)
+            .await
+            .map_err(|_| StateError::Retry)?;
+
+        cx.check(())?;
+
+        // up container
+        transactions::docker::compose_up(&service.container_name)
+            .await
+            .map_err(|_| StateError::Retry)?;
+
+        Ok(())
+    }
+
+    match inner(&cx, &service).await {
+        Ok(_) => {
+            tracing::info!("successfully updated service {}", service.service_label);
+            Ok(())
+        }
+        err => {
+            tracing::error!("failed to update service {}", service.service_label);
+            err
+        }
+    }
+}

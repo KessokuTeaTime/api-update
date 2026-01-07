@@ -2,7 +2,7 @@
 
 use std::{env, path::PathBuf};
 
-use api_framework::{env::parse_env, static_lazy_lock};
+use api_framework::{parse_env, static_lazy_lock};
 
 /// Sets up environment variables.
 pub fn setup() {
@@ -51,4 +51,14 @@ static_lazy_lock! {
 static_lazy_lock! {
     /// The Docker workspace directory. Defaults to `/workspace` if not specified.
     pub DOCKER_WORKSPACE_DIR: PathBuf = parse_env!("DOCKER_WORKSPACE_DIR" => |s| Ok(PathBuf::from(s))).unwrap_or(PathBuf::from("/workspace"));
+}
+
+static_lazy_lock! {
+    /// The Docker username.
+    pub DOCKER_USERNAME: String = env::var("DOCKER_USERNAME").expect("DOCKER_USERNAME not set in environment");
+}
+
+static_lazy_lock! {
+    /// The Docker password.
+    pub DOCKER_PASSWORD: String = env::var("DOCKER_PASSWORD").expect("DOCKER_PASSWORD not set in environment");
 }
