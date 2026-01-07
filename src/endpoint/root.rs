@@ -121,11 +121,11 @@ async fn post_transaction(
 
     match inner(&cx, &service).await {
         Ok(_) => {
-            tracing::info!("successfully updated service {}", service.service_label);
+            tracing::info!("successfully updated service {}", service.identifier());
             Ok(())
         }
         err => {
-            tracing::error!("failed to update service {}", service.service_label);
+            tracing::error!("failed to update service {}", service.identifier());
             err
         }
     }

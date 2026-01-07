@@ -55,6 +55,17 @@ pub mod services {
         pub image: String,
     }
 
+    impl ServiceConfig {
+        /// Returns an identifier string for the service.
+        pub fn identifier(&self) -> String {
+            if let Some(name) = &self.name {
+                format!("{} ({})", self.service_label, name)
+            } else {
+                self.service_label.to_owned()
+            }
+        }
+    }
+
     /// Defines the services related to updates.
     #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
     pub struct ServicesConfig {
