@@ -1,5 +1,7 @@
 //! Endpoint root.
 
+use std::env::set_current_dir;
+
 use api_framework::{
     framework::{
         StateError, StateResult,
@@ -87,10 +89,7 @@ async fn post_transaction(
     service: ServiceConfig,
 ) -> StateResult<()> {
     async fn inner(cx: &QueuedAsyncFrameworkContext, service: &ServiceConfig) -> StateResult<()> {
-        // cd to workspace
-        transactions::sys::cd(&DOCKER_WORKSPACE_DIR)
-            .await
-            .map_err(|_| StateError::Retry)?;
+        set_current_dir(&*DOCKER_WORKSPACE_DIR).map_err(|_| StateError::Retry)?;
 
         // login to docker
         transactions::docker::login()
