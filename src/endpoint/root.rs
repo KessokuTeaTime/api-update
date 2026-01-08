@@ -9,7 +9,6 @@ use api_framework::{
 };
 
 use axum::{Json, http::StatusCode, response::IntoResponse};
-use config_file::FromConfigFile as _;
 use serde::Deserialize;
 
 use crate::{
@@ -37,13 +36,12 @@ pub struct PostPayload {
 ///
 /// See: [`PostPayload`], [`post_transaction`]
 pub async fn post(Json(payload): Json<PostPayload>) -> impl IntoResponse {
-    let services = match ServicesConfig::from_config_file(ServicesConfig::file().path()) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("failed to read services config: {e:?}");
+    let services = match ServicesConfig::read() {
+        Some(s) => s,
+        None => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("failed to read services config: {e:?}"),
+                "failed to read services config",
             )
                 .into_response();
         }

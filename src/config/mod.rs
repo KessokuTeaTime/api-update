@@ -1,7 +1,8 @@
 //! Reads configs.
 
-use std::path::PathBuf;
+use std::{fmt::Debug, path::PathBuf};
 
+use config_file::FromConfigFile;
 use serde::Deserialize;
 
 use crate::env::CONFIG_DIR;
@@ -29,9 +30,33 @@ impl ConfigFile {
 }
 
 /// A trait for configs that can be deserialized.
-pub trait Config<'de>: Deserialize<'de> {
+pub trait Config<'de>: Deserialize<'de> + FromConfigFile {
     /// The [`ConfigFile`] this config corresponds to.
     fn file() -> ConfigFile;
+
+    /// Reads the config from the config file. This function wraps the error logging and returns
+    /// `None` on failure.
+    ///
+    /// See: [`FromConfigFile::from_config_file`]
+    fn read() -> Option<Self>
+    where
+        Self: Debug,
+    {
+        match Self::from_config_file(Self::file().path()) {
+            Ok(c) => {
+                tracing::trace!("read config from file {:?}: {:#?}", Self::file().path(), c);
+                Some(c)
+            }
+            Err(e) => {
+                tracing::error!(
+                    "failed to read config from file {:?}: {:?}",
+                    Self::file().path(),
+                    e
+                );
+                None
+            }
+        }
+    }
 }
 
 /// The services config.

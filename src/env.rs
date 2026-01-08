@@ -3,6 +3,7 @@
 use std::{env, path::PathBuf};
 
 use api_framework::{parse_env, static_lazy_lock};
+use tracing::level_filters::LevelFilter;
 
 /// Sets up environment variables.
 pub fn setup() {
@@ -31,6 +32,11 @@ static_lazy_lock! {
 static_lazy_lock! {
     /// The password of the API key.
     pub KTT_API_PASSWORD: String = env::var("KTT_API_PASSWORD").expect("KTT_API_PASSWORD not set in environment");
+}
+
+static_lazy_lock! {
+    /// The stderr level for tracing. Defaults to `INFO` if not specified.
+    pub TRACING_STDERR_LEVEL: LevelFilter = parse_env!("TRACING_STDERR_LEVEL" => |s| s.parse::<LevelFilter>(); anyhow).unwrap_or(LevelFilter::INFO);
 }
 
 static_lazy_lock! {
