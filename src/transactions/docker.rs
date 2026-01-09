@@ -1,47 +1,38 @@
 use anyhow::Result;
+use tokio::{io, task};
 
 use crate::env::{DOCKER_PASSWORD, DOCKER_USERNAME};
 
 pub async fn login() -> Result<()> {
-    match tokio::process::Command::new("docker")
+    let mut password = tokio::process::Command::new("echo")
+        .arg(&*DOCKER_PASSWORD)
+        .stdout(std::process::Stdio::piped())
+        .spawn()?;
+
+    let mut login = tokio::process::Command::new("docker")
         .arg("login")
         .arg("-u")
         .arg(&*DOCKER_USERNAME)
-        .arg("-p")
-        .arg(&*DOCKER_PASSWORD)
-        .output()
-        .await
-    {
-        Ok(output) => {
-            if output.status.success() {
-                tracing::info!(
-                    "successfully logged in to docker with username {}",
-                    &*DOCKER_USERNAME
-                );
-                Ok(())
-            } else {
-                tracing::error!(
-                    "failed to login to docker with username {}: {}",
-                    &*DOCKER_USERNAME,
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                Err(anyhow::anyhow!(
-                    "failed to login to docker with username {}",
-                    &*DOCKER_USERNAME
-                ))
-            }
-        }
-        Err(e) => {
-            tracing::error!(
-                "command failed to execute: docker login with username {}: {e:?}",
-                &*DOCKER_USERNAME
-            );
-            Err(anyhow::anyhow!(
-                "command failed to execute: docker login with username {}",
-                &*DOCKER_USERNAME
-            ))
-        }
-    }
+        .arg("--password-stdin")
+        .stdin(std::process::Stdio::piped())
+        .spawn()?;
+
+    let mut password_out = password.stdout.take().unwrap();
+    let mut login_in = login.stdin.take().unwrap();
+
+    let pipe = task::spawn(async move { io::copy(&mut password_out, &mut login_in).await });
+
+    pipe.await??;
+
+    password.wait().await?;
+    login.wait().await?;
+
+    tracing::info!(
+        "successfully logged in to docker with username {}",
+        &*DOCKER_USERNAME,
+    );
+
+    Ok(())
 }
 
 pub async fn logout() -> Result<()> {
