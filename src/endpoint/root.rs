@@ -41,6 +41,7 @@ pub async fn post(Json(payload): Json<PostPayload>) -> impl IntoResponse {
     let services = match ServicesConfig::read() {
         Some(s) => s,
         None => {
+            tracing::error!("failed to read services config");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "failed to read services config",
@@ -57,6 +58,7 @@ pub async fn post(Json(payload): Json<PostPayload>) -> impl IntoResponse {
     {
         Some(s) => s,
         None => {
+            tracing::error!("service with label '{}' not found", payload.service_label);
             return (
                 StatusCode::BAD_REQUEST,
                 format!("service with label '{}' not found", payload.service_label),
