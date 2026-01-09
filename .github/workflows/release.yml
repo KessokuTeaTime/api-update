@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: "build"
+  group: "release"
   cancel-in-progress: true
 
 env:
