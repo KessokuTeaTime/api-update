@@ -59,6 +59,14 @@ pub async fn post(Json(payload): Json<PostPayload>) -> impl IntoResponse {
         Some(s) => s,
         None => {
             tracing::error!("service with label '{}' not found", payload.service_label);
+            tracing::trace!(
+                "available services: {:?}",
+                services
+                    .services
+                    .iter()
+                    .map(|s| s.service_label.clone())
+                    .collect::<Vec<_>>(),
+            );
             return (
                 StatusCode::BAD_REQUEST,
                 format!("service with label '{}' not found", payload.service_label),
