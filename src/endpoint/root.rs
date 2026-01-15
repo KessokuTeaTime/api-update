@@ -26,7 +26,7 @@ static_lazy_lock! {
     QUEUED_ASYNC: QueuedAsyncFramework<String> = QueuedAsyncFramework::new();
 }
 
-/// The payload of the post.
+/// The payload for the post request.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PostPayload {
     /// The label of the service to update.
